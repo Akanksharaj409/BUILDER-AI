@@ -31,6 +31,7 @@ const BuilderPage = () => {
     logout,
     chatLoading,
     handleChat,
+    flushSave,
   } = useAppContext();
 
   useEffect(() => {
@@ -48,8 +49,9 @@ const BuilderPage = () => {
     }
   }, [id, loadProject, activeProject]);
 
-  const handleOpenPreview = () => {
+  const handleOpenPreview = async () => {
     if (!id) return;
+    if (flushSave) await flushSave();
     window.open(`/preview/${id}`, '_blank');
   };
 
@@ -57,6 +59,7 @@ const BuilderPage = () => {
     if (!id) return;
     setPublishing(true);
     try {
+      if (flushSave) await flushSave();
       await api.post(`/api/projects/${id}/publish`);
       const url = `${window.location.origin}/publish/${id}`;
       setPublishUrl(url);
@@ -69,8 +72,9 @@ const BuilderPage = () => {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!activeProject) return;
+    if (flushSave) await flushSave();
     exportProjectZip(activeProject);
   };
 
