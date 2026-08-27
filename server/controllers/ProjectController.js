@@ -215,6 +215,7 @@ export async function updateProjectFiles(req, res) {
         }
     }
     project.files = newFiles;
+    project.markModified('files');
     await project.save();
 
     const filesObj = {};

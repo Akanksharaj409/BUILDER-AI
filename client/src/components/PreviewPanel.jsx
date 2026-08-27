@@ -24,9 +24,21 @@ function SandpackFileWatcher({ onLiveFilesChange }) {
         for (const [path, fileObj] of Object.entries(files)) {
             const fileCode = fileObj.code;
             updatedFiles[path] = fileCode;
-            const originalContent = typeof project.files[path] === "string" ?
-                project.files[path] : project.files[path]?.content;
-            if (originalContent !== undefined && originalContent !== fileCode) {
+
+            const altPath = path.startsWith("/") ? path.substring(1) : "/" + path;
+            const originalContent = typeof project.files[path] === "string" ? project.files[path] :
+                (project.files[path]?.content !== undefined ? project.files[path].content :
+                (typeof project.files[altPath] === "string" ? project.files[altPath] : project.files[altPath]?.content));
+
+            let isTailwindPrependOnly = false;
+            if ((path === "/styles.css" || path === "styles.css") && originalContent !== undefined) {
+                const injected = `@import url('https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css');\n`;
+                if (!originalContent.includes("tailwindcss") && fileCode === injected + originalContent) {
+                    isTailwindPrependOnly = true;
+                }
+            }
+
+            if (originalContent !== undefined && originalContent !== fileCode && !isTailwindPrependOnly) {
                 hasChanges = true;
             }
         }
@@ -86,6 +98,25 @@ const PreviewPanel = ({ project, activeFile, showCode }) => {
         } else {
             spFiles["/styles.css"] = {
                 code: `@import url('https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css');\nbody { font-family: sans-serif; }`,
+            };
+        }
+
+        if (!spFiles["/index.js"] && !spFiles["/src/index.js"]) {
+            spFiles["/index.js"] = {
+                code: `import React, { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./styles.css";
+
+import App from "./App";
+
+const rootElement = document.getElementById("root");
+const root = createRoot(rootElement);
+
+root.render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);`,
             };
         }
 

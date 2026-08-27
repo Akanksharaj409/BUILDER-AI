@@ -1,10 +1,20 @@
 import { detectDependencies } from "./sandpackUtils";
+import toast from "react-hot-toast";
 
 export async function exportProjectZip(project) {
-    if (!project) return;
+    if (!project || !project.files || Object.keys(project.files).length === 0) {
+        toast.error("No project files to download");
+        return;
+    }
     try {
-        const JSZip = (await import("jszip")).default;
-        const { saveAs } = await import("file-saver");
+        const jszipModule = await import("jszip");
+        const JSZip = jszipModule.default || jszipModule;
+        const fileSaverModule = await import("file-saver");
+        const saveAs = fileSaverModule.saveAs || fileSaverModule.default || fileSaverModule;
+
+        if (typeof saveAs !== "function") {
+            throw new Error("Download helper (saveAs) is unavailable");
+        }
 
         const zip = new JSZip();
 
@@ -111,7 +121,9 @@ createRoot(document.getElementById('root')).render(<App />);
         const blob = await zip.generateAsync({ type: "blob" });
         const fileName = `${(project.name || "website").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.zip`;
         saveAs(blob, fileName);
+        toast.success("Project ZIP downloaded!");
     } catch (error) {
         console.error("Export project error:", error);
+        toast.error("Failed to download project ZIP");
     }
 }

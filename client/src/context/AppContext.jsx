@@ -218,7 +218,14 @@ export function AppContextProvider({ children }) {
         () =>
             debounce(async (files, id) => {
                 try {
-                    await api.put(`/api/projects/${id}/files`, { files });
+                    const { data } = await api.put(`/api/projects/${id}/files`, { files });
+                    const updated = data.project || data;
+                    if (updated?.files) {
+                        setActiveProject((prev) => {
+                            if (!prev || prev._id !== id) return prev;
+                            return { ...prev, files: updated.files };
+                        });
+                    }
                 } catch (error) {
                     console.error("Failed to save files", error);
                     toast.error("Failed to save files");
@@ -234,12 +241,21 @@ export function AppContextProvider({ children }) {
     }, [debouncedSave]);
 
     const updateProjectFiles = useCallback(
-        async (files) => {
+        (files) => {
             if (!activeProject || !user) return;
+            // Instantly update activeProject in React state so all UI components update live
+            setActiveProject((prev) => {
+                if (!prev) return prev;
+                return { ...prev, files };
+            });
             debouncedSave(files, activeProject._id);
         },
         [activeProject, user, debouncedSave]
     );
+
+    const flushSave = useCallback(async () => {
+        await debouncedSave.flush();
+    }, [debouncedSave]);
 
     return (
         <AppContext.Provider
@@ -268,6 +284,7 @@ export function AppContextProvider({ children }) {
                 logout,
                 handleChat,
                 updateProjectFiles,
+                flushSave,
             }}
         >
             {children}

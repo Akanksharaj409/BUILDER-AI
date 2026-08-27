@@ -29,6 +29,25 @@ const FullPagePreview = ({ files }) => {
             };
         }
 
+        if (!spFiles["/index.js"] && !spFiles["/src/index.js"]) {
+            spFiles["/index.js"] = {
+                code: `import React, { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./styles.css";
+
+import App from "./App";
+
+const rootElement = document.getElementById("root");
+const root = createRoot(rootElement);
+
+root.render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);`,
+            };
+        }
+
         if (!spFiles["/public/index.html"] && !spFiles["/index.html"]) {
             spFiles["/public/index.html"] = {
                 code: `<!DOCTYPE html>
