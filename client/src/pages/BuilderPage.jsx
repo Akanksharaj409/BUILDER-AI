@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { MessageSquareIcon, FolderTree } from 'lucide-react';
-import ChatPanel from '../components/Chatpanel';
+import ChatPanel from '../components/ChatPanel';
 import FileExplorer from '../components/FileExplorer';
 import PreviewPanel from '../components/PreviewPanel';
 import Loading from '../components/Loading';
