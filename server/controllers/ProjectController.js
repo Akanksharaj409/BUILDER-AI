@@ -207,6 +207,21 @@ export async function updateProjectFiles(req, res) {
         return res.status(404).json({ error: "Project not found" });
     }
 
+    // Ignore manual save requests while background AI generation is actively running
+    if (project.status === "generating" || project.status === "pending") {
+        const filesObj = {};
+        for (const [path, entry] of Object.entries(project.files || {})) {
+            filesObj[path] = entry.content;
+        }
+        return res.json({
+            id: project._id,
+            name: project.name,
+            description: project.description,
+            files: filesObj,
+            status: project.status,
+        });
+    }
+
     // Rebuild project files map with content & hashes
     const newFiles = {};
     for (const [path, content] of Object.entries(files)) {

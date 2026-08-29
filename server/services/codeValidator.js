@@ -223,33 +223,47 @@ function fixImportPaths(code, filePath, allPlannedFiles) {
     }
 
     const currentDir = getDir(filePath);
-    const plannedPaths = allPlannedFiles.map((f) => (f.path.startsWith("/") ? f.path : "/" + f.path));
+    const plannedPaths = allPlannedFiles.map((f) => {
+        const p = typeof f === "string" ? f : f.path;
+        return p.startsWith("/") ? p : "/" + p;
+    });
 
-    // Matches lines like: import Header from './components/Header';
-    // or import '../styles.css'; or require('./components/Header')
     const importRegex = /(from\s+['"]|import\s+['"])([^'"]+)(['"])/g;
 
     const newCode = code.replace(importRegex, (match, prefix, importTarget, suffix) => {
-        // Skip absolute imports (non-relative packages like 'react')
-        if (!importTarget.startsWith(".")) {
+        let normalizedTarget = importTarget;
+        if (importTarget.startsWith("@/")) {
+            normalizedTarget = "/" + importTarget.substring(2);
+        } else if (importTarget.startsWith("components/")) {
+            normalizedTarget = "/" + importTarget;
+        }
+
+        const isLocalImport = normalizedTarget.startsWith(".") || normalizedTarget.startsWith("/");
+        if (!isLocalImport) {
             return match;
         }
 
-        // 1. Resolve relative import target path
-        const resolvedTarget = resolvePath(currentDir, importTarget);
+        const resolvedTarget = normalizedTarget.startsWith(".")
+            ? resolvePath(currentDir, normalizedTarget)
+            : (normalizedTarget.startsWith("/") ? normalizedTarget : "/" + normalizedTarget);
+
         const resolvedClean = cleanExtension(resolvedTarget);
 
-        // Check if it already matches a planned file path exactly (with or without extension)
-        const exactExists = plannedPaths.some((p) => cleanExtension(p) === resolvedClean);
-        if (exactExists) {
+        const exactMatch = plannedPaths.find((p) => cleanExtension(p) === resolvedClean);
+        if (exactMatch) {
+            if (importTarget.startsWith("/") || importTarget.startsWith("@/") || importTarget.startsWith("components/")) {
+                const rel = getRelativePath(currentDir, exactMatch);
+                const finalRel = rel.startsWith(".") ? rel : "./" + rel;
+                const ext = /\.(js|jsx|css|ts|tsx)$/.test(importTarget) ? "." + importTarget.split(".").pop() : "";
+                const rewritten = cleanExtension(finalRel) + ext;
+                warnings.push(`${filePath}: Rewrote absolute import '${importTarget}' → '${rewritten}'`);
+                return `${prefix}${rewritten}${suffix}`;
+            }
             return match;
         }
 
-        // 2. Mismatch! Try to find a planned file with the same filename
         const importFilename = resolvedClean.split("/").pop();
-        if (!importFilename) {
-            return match;
-        }
+        if (!importFilename) return match;
 
         const foundPlannedPath = plannedPaths.find((p) => {
             const plannedClean = cleanExtension(p);
@@ -258,19 +272,15 @@ function fixImportPaths(code, filePath, allPlannedFiles) {
         });
 
         if (foundPlannedPath) {
-            // Calculate relative path from current directory to actual planned file path
             const newRelative = getRelativePath(currentDir, foundPlannedPath);
-            // Prefix relative prefix if missing
             const finalRelative = newRelative.startsWith(".") ? newRelative : "./" + newRelative;
-
-            // Retain file extension if the original import target had it
             const hasExt = /\.(js|jsx|css|ts|tsx)$/.test(importTarget);
             const ext = hasExt ? "." + importTarget.split(".").pop() : "";
 
             const rewrittenTarget = cleanExtension(finalRelative) + ext;
             if (rewrittenTarget !== importTarget) {
                 warnings.push(
-                    `${filePath}: Corrected import '${importTarget}' to '${rewrittenTarget}' (file planned at '${foundPlannedPath}')`,
+                    `${filePath}: Corrected import '${importTarget}' → '${rewrittenTarget}' (file planned at '${foundPlannedPath}')`,
                 );
                 return `${prefix}${rewrittenTarget}${suffix}`;
             }

@@ -243,6 +243,7 @@ export function AppContextProvider({ children }) {
     const updateProjectFiles = useCallback(
         (files) => {
             if (!activeProject || !user) return;
+            if (activeProject.status === "generating" || activeProject.status === "pending") return;
             // Instantly update activeProject in React state so all UI components update live
             setActiveProject((prev) => {
                 if (!prev) return prev;

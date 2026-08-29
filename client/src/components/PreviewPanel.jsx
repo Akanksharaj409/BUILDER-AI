@@ -17,7 +17,7 @@ function SandpackFileWatcher({ onLiveFilesChange }) {
 
     useEffect(() => {
         const project = activeProjectRef.current;
-        if (!project || !project.files) return;
+        if (!project || !project.files || project.status === "generating" || project.status === "pending") return;
         const updatedFiles = {};
         let hasChanges = false;
 
