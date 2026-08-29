@@ -4,7 +4,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { connectToDatBase } from "./config/db.js";
 import authRouter from "./routes/authRoutes.js";
-import projectRouter from "./routes/projectRoutes.js";
+import projectRouter from "./routes/ProjectRoutes.js";
 
 const app = express();
 
