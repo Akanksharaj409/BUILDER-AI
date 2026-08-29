@@ -10,6 +10,7 @@ function SandpackFileWatcher({ onLiveFilesChange }) {
     const { files } = sandpack;
     const { activeProject, updateProjectFiles } = useAppContext();
 
+    const isInitialMount = useRef(true);
     const activeProjectRef = useRef(activeProject);
     useEffect(() => {
         activeProjectRef.current = activeProject;
@@ -18,11 +19,18 @@ function SandpackFileWatcher({ onLiveFilesChange }) {
     useEffect(() => {
         const project = activeProjectRef.current;
         if (!project || !project.files || project.status === "generating" || project.status === "pending") return;
+
         const updatedFiles = {};
         let hasChanges = false;
 
         for (const [path, fileObj] of Object.entries(files)) {
             const fileCode = fileObj.code;
+            
+            // Exclude synthetic entry / html wrapper files from project files payload
+            if (path === "/index.js" || path === "index.js" || path === "/public/index.html" || path === "public/index.html") {
+                continue;
+            }
+
             updatedFiles[path] = fileCode;
 
             const altPath = path.startsWith("/") ? path.substring(1) : "/" + path;
@@ -33,17 +41,25 @@ function SandpackFileWatcher({ onLiveFilesChange }) {
             let isTailwindPrependOnly = false;
             if ((path === "/styles.css" || path === "styles.css") && originalContent !== undefined) {
                 const injected = `@import url('https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css');\n`;
-                if (!originalContent.includes("tailwindcss") && fileCode === injected + originalContent) {
+                if (!originalContent.includes("tailwindcss") && (fileCode === injected + originalContent || fileCode.trim() === (injected + originalContent).trim())) {
                     isTailwindPrependOnly = true;
                 }
             }
 
-            if (originalContent !== undefined && originalContent !== fileCode && !isTailwindPrependOnly) {
+            if (originalContent !== undefined && originalContent.trim() !== fileCode.trim() && !isTailwindPrependOnly) {
                 hasChanges = true;
             }
         }
-        //Sync live files to parent
+
+        // Sync live files to parent
         if (onLiveFilesChange) onLiveFilesChange(updatedFiles);
+
+        // Skip DB save on initial mount
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
+
         if (hasChanges && updateProjectFiles) {
             updateProjectFiles(updatedFiles);
         }
