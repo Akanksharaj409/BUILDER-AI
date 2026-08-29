@@ -19,9 +19,17 @@ const FullPagePreview = ({ files }) => {
 
         // Ensure styles.css has Tailwind CSS stylesheet imported
         if (spFiles["/styles.css"]) {
-            const existingCode = spFiles["/styles.css"].code || "";
+            let existingCode = spFiles["/styles.css"].code || "";
+            // Clean stray fence markers or conversational preambles
+            existingCode = existingCode.replace(/^```[a-zA-Z0-9_-]*\s*$/gm, "").trim();
+            const firstCssIdx = existingCode.search(/(?:\/\*|@import|@keyframes|@media|@font-face|:root|html|body|[*a-zA-Z0-9_#.-]+\s*\{)/);
+            if (firstCssIdx > 0) {
+                existingCode = existingCode.slice(firstCssIdx);
+            }
             if (!existingCode.includes("tailwindcss")) {
                 spFiles["/styles.css"].code = `@import url('https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css');\n` + existingCode;
+            } else {
+                spFiles["/styles.css"].code = existingCode;
             }
         } else {
             spFiles["/styles.css"] = {

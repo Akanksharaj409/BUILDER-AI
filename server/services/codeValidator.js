@@ -11,19 +11,25 @@ export function validateAndFixCode(code, filePath, context) {
     const isJS = filePath.endsWith(".js") || filePath.endsWith(".jsx");
 
     // 1. Strip markdown code fences that some models wrap around code
-    const fencePattern = /^```(?:jsx?|javascript|css|html|tsx?|react)?\s*\n([\s\S]*?)\n```\s*$/;
-    const fenceMatch = code.match(fencePattern);
-    if (fenceMatch) {
-        code = fenceMatch[1];
-        warnings.push(`${filePath}: Stripped markdown code fences`);
+    const globalFenceMatch = code.match(/```(?:jsx?|javascript|css|html|tsx?|react)?\s*\n([\s\S]*?)\n?```/i);
+    if (globalFenceMatch) {
+        code = globalFenceMatch[1];
+        warnings.push(`${filePath}: Extracted code block from markdown fence`);
+    } else {
+        code = code.replace(/^```[a-zA-Z0-9_-]*\s*$/gm, "");
     }
 
-    // Also handle cases where fences appear at the very start/end with other content
-    code = code.replace(/^```(?:jsx?|javascript|css|html|tsx?|react)?\s*\n/, "");
-    code = code.replace(/\n```\s*$/, "");
-
     if (isCSS) {
-        // CSS-specific fixes — minimal, just trim and return
+        // Strip any remaining fence markers in CSS
+        code = code.split("\n").filter(line => !line.trim().startsWith("```")).join("\n");
+
+        // Remove any conversational intro text before valid CSS declarations/selectors
+        const firstCssIndex = code.search(/(?:\/\*|@import|@keyframes|@media|@font-face|:root|html|body|[*a-zA-Z0-9_#.-]+\s*\{)/);
+        if (firstCssIndex > 0) {
+            code = code.slice(firstCssIndex);
+            warnings.push(`${filePath}: Removed conversational preamble before CSS rules`);
+        }
+
         return { code: code.trim() + "\n", warnings };
     }
 
