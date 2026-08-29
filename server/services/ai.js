@@ -1,9 +1,8 @@
 import {createOpenAI} from '@ai-sdk/openai'
-import { generateObject } from 'ai';
+import { generateObject, generateText } from 'ai';
 import pMap from "p-map";
 import { FileCodeSchema, FilePlanSchema, RevisionResultSchema } from './aiSchemas.js';
 import { buildFileCodeSystem, FILE_PLAN_SYSTEM, REVISE_SYSTEM } from './prompts.js';
-import { el } from 'zod/v4/locales';
 import { normalizeContent } from './contentNormalizer.js';
 import { validateAndFixCode, validateRevisionContent } from './codeValidator.js';
 
@@ -18,6 +17,63 @@ const openrouter = createOpenAI({
 
 const model = openrouter(MODEL);
 
+// Resilient wrapper for JSON object generation handling models without native JSON mode
+async function safeGenerateObject({ schema, system, prompt }) {
+    try {
+        return await generateObject({
+            model,
+            schema,
+            system,
+            prompt,
+            mode: 'json',
+            maxRetries: 2,
+        });
+    } catch (firstErr) {
+        console.warn(`[AI] generateObject (json mode) failed: ${firstErr.message}. Trying auto mode...`);
+    }
+
+    try {
+        return await generateObject({
+            model,
+            schema,
+            system,
+            prompt,
+            mode: 'auto',
+            maxRetries: 1,
+        });
+    } catch (secondErr) {
+        console.warn(`[AI] generateObject (auto mode) failed: ${secondErr.message}. Falling back to generateText + manual JSON parsing...`);
+    }
+
+    const { text } = await generateText({
+        model,
+        system: system + "\n\nCRITICAL REQUIREMENT: Respond ONLY with a valid raw JSON object matching the requested schema. Do NOT wrap in markdown code blocks.",
+        prompt,
+        maxRetries: 2,
+    });
+
+    let cleanedText = text.trim();
+    const jsonFenceMatch = cleanedText.match(/```(?:json)?\s*\n([\s\S]*?)\n?```/i);
+    if (jsonFenceMatch) {
+        cleanedText = jsonFenceMatch[1].trim();
+    } else {
+        const firstBrace = cleanedText.indexOf("{");
+        const lastBrace = cleanedText.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            cleanedText = cleanedText.slice(firstBrace, lastBrace + 1);
+        }
+    }
+
+    try {
+        const parsed = JSON.parse(cleanedText);
+        const validatedObject = schema.parse(parsed);
+        return { object: validatedObject };
+    } catch (jsonErr) {
+        console.error(`[AI Fallback] JSON parsing failed: ${jsonErr.message}. Raw output:\n${text}`);
+        throw new Error(`Failed to parse AI response: ${jsonErr.message}`);
+    }
+}
+
 // Generate a single file's code
 async function generateSingleFile(file, allFiles, prompt, alreadyGeneratedFiles){
      const system = buildFileCodeSystem(allFiles, alreadyGeneratedFiles);
@@ -25,12 +81,10 @@ async function generateSingleFile(file, allFiles, prompt, alreadyGeneratedFiles)
      const userMsg = `Project: ${prompt}\n\nWrite the complete code for: ${file.path}\nPurpose: ${file.description}`;
 
      console.log(`[AI] Creating file: ${file.path}...`);
-     const { object } = await generateObject({
-        model,
+     const { object } = await safeGenerateObject({
         schema: FileCodeSchema,
         system,
         prompt: userMsg,
-        maxRetries: 2,
      })
 
      let code = normalizeContent(object.code);
@@ -56,12 +110,10 @@ async function generateSingleFile(file, allFiles, prompt, alreadyGeneratedFiles)
 export async function generateProject(prompt, callbacks){
     // Phase 1: Plan
     console.log(`[AI] Phase 1: Planning file structure for: "${prompt.slice(0,80)}..."`);
-    const { object: plan } = await generateObject({
-        model,
+    const { object: plan } = await safeGenerateObject({
         schema: FilePlanSchema,
         system: FILE_PLAN_SYSTEM,
         prompt: `Plan a React website for: ${prompt}`,
-        maxRetries: 2,
     });
 
     if(!plan.files.find((f)=> f.path === "/App.js")){
@@ -197,12 +249,10 @@ export async function reviseProject(prompt, manifest, relevantFiles, recentMessa
 
     console.log("[AI] Revising project...");
 
-    const { object: rawParsed } = await generateObject({
-        model,
+    const { object: rawParsed } = await safeGenerateObject({
         schema: RevisionResultSchema,
         system: REVISE_SYSTEM,
         prompt: contextParts.join("\n"),
-        maxRetries: 2
     })
 
     if(rawParsed && Array.isArray(rawParsed.operations)){
