@@ -1,5 +1,4 @@
-// Post-generation code validator and auto-fixer
-// Repairs common AI code generation errors before saving to DB using regex checks
+import { normalizeContent } from './contentNormalizer.js';
 
 // Void HTML elements that must be self-closed in JSX
 const VOID_ELEMENTS = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"];
@@ -7,6 +6,7 @@ const VOID_ELEMENTS = ["area", "base", "br", "col", "embed", "hr", "img", "input
 // Validate and auto-fix common AI-generated code issues
 export function validateAndFixCode(code, filePath, context) {
     const warnings = [];
+    code = normalizeContent(code);
     const isCSS = filePath.endsWith(".css");
     const isJS = filePath.endsWith(".js") || filePath.endsWith(".jsx");
 
